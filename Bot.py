@@ -3,7 +3,7 @@ import requests
 import telebot
 
 # تم وضع التوكن مباشرة داخل الكود
-TOKEN = "8698370133:AAH6yRXtsjTorCCx5iT0PYRjVUoJ_NngOx8"
+TOKEN = "8842555340:AAHVE2quTajNfx-v12RlbW5dUn7V9IVXOlI"
 
 bot = telebot.TeleBot(TOKEN)
 
