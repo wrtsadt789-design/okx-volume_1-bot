@@ -3,20 +3,19 @@ import threading
 import requests
 import telebot
 
-TOKEN = "8698370133:AAH6yRXtsjTorCCx5iT0PYRjVUoJ_NngOx8"
-
-# ضع هنا Chat ID الخاص بك أو بالقناة/المجموعة
-CHAT_ID = "ضع_هنا_CHAT_ID" 
+# البيانات الخاصة بك
+TOKEN = "8829854527:AAF5SrjntKMn3Lwe1VnjKJYzUpVgmUe6-hQ"
+CHAT_ID = "8201127054" 
 
 bot = telebot.TeleBot(TOKEN)
 
-# **حل مشكلة Webhook Conflict**: إزالة أي ويب هوك نشط قبل البدء
+# إزالة أي جلسة أو Webhook قديم قبل بدء التشغيل
 try:
     bot.remove_webhook()
 except Exception as e:
-    print(f"إشعارات الـ Webhook: {e}")
+    print(f"Webhook Clean Notice: {e}")
 
-# متغيرات لحفظ القراءات السابقة
+# متغيرات لحفظ القراءات السابقة لحساب الفارق والتوقع
 previous_vol_usd = None
 previous_price = None
 
@@ -53,7 +52,6 @@ def get_btc_volume_and_analysis():
             diff_text = ""
             prediction_text = ""
             
-            # حساب قيمة حركة 0.1% من السعر الحالي
             price_move_01 = current_price * 0.001
             
             if previous_vol_usd is not None and previous_price is not None:
@@ -65,7 +63,6 @@ def get_btc_volume_and_analysis():
                 else:
                     diff_text = f"📉 **صافي الفوليوم (آخر 10 دقائق):** -${abs(net_usd_10m):,.2f}\n"
 
-                # تقدير كمية الفوليوم المطلوبة لتحريك السعر بنسبة 0.1%
                 if abs(price_change_10m) > 0 and abs(net_usd_10m) > 0:
                     vol_per_dollar_move = abs(net_usd_10m) / abs(price_change_10m)
                     needed_vol_for_01 = vol_per_dollar_move * price_move_01
@@ -78,7 +75,6 @@ def get_btc_volume_and_analysis():
                     approx_needed_vol = vol_24h_usd * 0.0005
                     prediction_text = f"🎯 **توقع الحركة (0.1% = ${price_move_01:,.2f}):**\nيحتاج السعر لضخ/سحب فوليوم يقارب **${approx_needed_vol:,.0f}** للتحرك بنسبة 0.1%\n"
 
-            # تحديث القراءات السابقة
             previous_vol_usd = vol_24h_usd
             previous_price = current_price
 
@@ -99,12 +95,11 @@ def get_btc_volume_and_analysis():
 # دالة التكرار كل 10 دقائق (600 ثانية)
 def auto_send_btc_analysis():
     while True:
-        if CHAT_ID != "ضع_هنا_CHAT_ID":
-            try:
-                msg = get_btc_volume_and_analysis()
-                bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
-            except Exception as e:
-                print(f"خطأ في الإرسال التلقائي: {e}")
+        try:
+            msg = get_btc_volume_and_analysis()
+            bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
+        except Exception as e:
+            print(f"خطأ في الإرسال التلقائي: {e}")
         time.sleep(600)  # 10 دقائق
 
 # تشغيل التكرار التلقائي في الخلفية
@@ -112,7 +107,7 @@ threading.Thread(target=auto_send_btc_analysis, daemon=True).start()
 
 @bot.message_handler(commands=['start'])
 def start_command(message):
-    bot.reply_to(message, "أهلاً بك! البوت يقوم بتحليل حركة فوليوم BTC/USDT وتوقع تأثير نسبة 0.1% على السعر كل 10 دقائق تلقائياً. استخدم /volume للحصول على التقرير فوراً.")
+    bot.reply_to(message, "أهلاً بك! البوت يعمل بنجاح ويرسل تقرير الفوليوم والتوقعات كل 10 دقائق تلقائياً. يمكنك استخدام /volume للطلب الفوري.")
 
 @bot.message_handler(commands=['volume'])
 def fetch_btc_volume(message):
@@ -120,5 +115,5 @@ def fetch_btc_volume(message):
     bot.reply_to(message, msg, parse_mode="Markdown")
 
 if __name__ == "__main__":
-    print("جاري تشغيل بوت التحليل والتوقع لحركة البيتكوين...")
+    print("جاري تشغيل بوت التحليل والتوقع الجديد...")
     bot.infinity_polling(skip_pending=True)
