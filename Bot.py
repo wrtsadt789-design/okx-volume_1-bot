@@ -2,11 +2,8 @@ import os
 import requests
 import telebot
 
-TOKEN = os.environ.get("TELEGRAM_TOKEN")
-
-if not TOKEN:
-    print("خطأ: لم يتم ضبط TELEGRAM_TOKEN!")
-    exit(1)
+# تم وضع التوكن مباشرة داخل الكود
+TOKEN = "8698370133:AAH6yRXtsjTorCCx5iT0PYRjVUoJ_NngOx8"
 
 bot = telebot.TeleBot(TOKEN)
 
