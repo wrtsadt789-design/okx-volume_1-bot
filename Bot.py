@@ -3,19 +3,17 @@ import threading
 import requests
 import telebot
 
-# البيانات الخاصة بك
 TOKEN = "8829854527:AAF5SrjntKMn3Lwe1VnjKJYzUpVgmUe6-hQ"
 CHAT_ID = "8201127054" 
 
 bot = telebot.TeleBot(TOKEN)
 
-# إزالة أي جلسة أو Webhook قديم قبل بدء التشغيل
+# إزالة أي جلسة أو Webhook قديم
 try:
     bot.remove_webhook()
 except Exception as e:
-    print(f"Webhook Clean Notice: {e}")
+    print(f"إشعارات Webhook: {e}")
 
-# متغيرات لحفظ القراءات السابقة لحساب الفارق والتوقع
 previous_vol_usd = None
 previous_price = None
 
@@ -48,32 +46,44 @@ def get_btc_volume_and_analysis():
             else:
                 market_status = "🟡 غير محدد"
 
-            # 2. حساب الفوليوم الصافي للـ 10 دقائق وتوقع حركة 0.1%
+            # 2. حساب الفوليوم الصافي وتحويله لـ BTC
             diff_text = ""
             prediction_text = ""
             
-            price_move_01 = current_price * 0.001
+            price_move_01 = current_price * 0.001  # حركة 0.1%
             
             if previous_vol_usd is not None and previous_price is not None:
                 net_usd_10m = vol_24h_usd - previous_vol_usd
+                net_btc_10m = net_usd_10m / current_price if current_price > 0 else 0
                 price_change_10m = current_price - previous_price
                 
                 if net_usd_10m >= 0:
-                    diff_text = f"📈 **صافي الفوليوم (آخر 10 دقائق):** +${net_usd_10m:,.2f}\n"
+                    diff_text = f"📈 **صافي الفوليوم (آخر 10 دقائق):**\n🟢 **شرائي:** +${net_usd_10m:,.2f} (يعادل **+{net_btc_10m:,.2f} BTC**)\n"
                 else:
-                    diff_text = f"📉 **صافي الفوليوم (آخر 10 دقائق):** -${abs(net_usd_10m):,.2f}\n"
+                    diff_text = f"📉 **صافي الفوليوم (آخر 10 دقائق):**\n🔴 **بيعي:** -${abs(net_usd_10m):,.2f} (يعادل **-{abs(net_btc_10m):,.2f} BTC**)\n"
 
+                # حساب التوقع بحجم الـ BTC والدولار
                 if abs(price_change_10m) > 0 and abs(net_usd_10m) > 0:
                     vol_per_dollar_move = abs(net_usd_10m) / abs(price_change_10m)
-                    needed_vol_for_01 = vol_per_dollar_move * price_move_01
+                    needed_vol_for_01_usd = vol_per_dollar_move * price_move_01
+                    needed_vol_for_01_btc = needed_vol_for_01_usd / current_price
                     
                     if net_usd_10m > 0:
-                        prediction_text = f"🎯 **احتمالية الحركة (0.1% = ${price_move_01:,.2f}):**\nدخول فوليوم شرائي بقيمة **${needed_vol_for_01:,.0f}** يتوقع أن يرفع السعر إلى **${current_price + price_move_01:,.2f}**\n"
+                        prediction_text = (
+                            f"🎯 **احتمالية الحركة (0.1% = ${price_move_01:,.2f}):**\n"
+                            f"دخول فوليوم شرائي بقيمة **${needed_vol_for_01_usd:,.0f}** (حوالي **{needed_vol_for_01_btc:,.2f} BTC**) "
+                            f"يتوقع أن يرفع السعر إلى **${current_price + price_move_01:,.2f}**\n"
+                        )
                     else:
-                        prediction_text = f"🎯 **احتمالية الحركة (0.1% = ${price_move_01:,.2f}):**\nخروج فوليوم بيعي بقيمة **${needed_vol_for_01:,.0f}** يتوقع أن يخفض السعر إلى **${current_price - price_move_01:,.2f}**\n"
+                        prediction_text = (
+                            f"🎯 **احتمالية الحركة (0.1% = ${price_move_01:,.2f}):**\n"
+                            f"خروج فوليوم بيعي بقيمة **${needed_vol_for_01_usd:,.0f}** (حوالي **{needed_vol_for_01_btc:,.2f} BTC**) "
+                            f"يتوقع أن يخفض السعر إلى **${current_price - price_move_01:,.2f}**\n"
+                        )
                 else:
-                    approx_needed_vol = vol_24h_usd * 0.0005
-                    prediction_text = f"🎯 **توقع الحركة (0.1% = ${price_move_01:,.2f}):**\nيحتاج السعر لضخ/سحب فوليوم يقارب **${approx_needed_vol:,.0f}** للتحرك بنسبة 0.1%\n"
+                    approx_needed_vol_usd = vol_24h_usd * 0.0005
+                    approx_needed_vol_btc = approx_needed_vol_usd / current_price
+                    prediction_text = f"🎯 **توقع الحركة (0.1% = ${price_move_01:,.2f}):**\nيحتاج السعر لضخ/سحب فوليوم يقارب **${approx_needed_vol_usd:,.0f}** (**{approx_needed_vol_btc:,.2f} BTC**) للتحرك بنسبة 0.1%\n"
 
             previous_vol_usd = vol_24h_usd
             previous_price = current_price
@@ -82,17 +92,16 @@ def get_btc_volume_and_analysis():
                 f"⚡ **تقرير BTC/USDT الحصري (كل 10 دقائق)**\n\n"
                 f"📊 **حالة السوق:** {market_status}\n"
                 f"💰 **السعر الحالي:** ${current_price:,.2f}\n\n"
-                f"{diff_text}"
+                f"{diff_text}\n"
                 f"{prediction_text}\n"
-                f"📈 **إجمالي الفوليوم (24h):** ${vol_24h_usd:,.0f}\n"
-                f"🪙 **إجمالي البتكوين (24h):** {vol_24h_btc:,.2f} BTC"
+                f"📈 **إجمالي الفوليوم (24 ساعة):** ${vol_24h_usd:,.0f}\n"
+                f"🪙 **إجمالي البيتكوين (24 ساعة):** {vol_24h_btc:,.2f} BTC"
             )
             return text
         return "خطأ في استجابة API الخاصة بـ OKX."
     except Exception as e:
         return f"حدث خطأ أثناء جلب البيانات: {str(e)}"
 
-# دالة التكرار كل 10 دقائق (600 ثانية)
 def auto_send_btc_analysis():
     while True:
         try:
@@ -100,14 +109,13 @@ def auto_send_btc_analysis():
             bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
         except Exception as e:
             print(f"خطأ في الإرسال التلقائي: {e}")
-        time.sleep(600)  # 10 دقائق
+        time.sleep(600)
 
-# تشغيل التكرار التلقائي في الخلفية
 threading.Thread(target=auto_send_btc_analysis, daemon=True).start()
 
 @bot.message_handler(commands=['start'])
 def start_command(message):
-    bot.reply_to(message, "أهلاً بك! البوت يعمل بنجاح ويرسل تقرير الفوليوم والتوقعات كل 10 دقائق تلقائياً. يمكنك استخدام /volume للطلب الفوري.")
+    bot.reply_to(message, "أهلاً بك! البوت يعمل بنجاح ويرسل التقرير باللغة العربية مع حساب قيمة البيتكوين مباشرة.")
 
 @bot.message_handler(commands=['volume'])
 def fetch_btc_volume(message):
@@ -115,5 +123,5 @@ def fetch_btc_volume(message):
     bot.reply_to(message, msg, parse_mode="Markdown")
 
 if __name__ == "__main__":
-    print("جاري تشغيل بوت التحليل والتوقع الجديد...")
+    print("جاري تشغيل البوت المحدث...")
     bot.infinity_polling(skip_pending=True)
