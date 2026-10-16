@@ -1,127 +1,104 @@
-import time
-import threading
-import requests
-import telebot
+import logging
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import (
+    ApplicationBuilder,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
+# تفعيل نظام السجلات لمتابعة حالة البوت
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
+
+# إعدادات البوت والمالك
 TOKEN = "8829854527:AAF5SrjntKMn3Lwe1VnjKJYzUpVgmUe6-hQ"
-CHAT_ID = "8201127054" 
+OWNER_ID = 8201127054
 
-bot = telebot.TeleBot(TOKEN)
+# قاعدة بيانات مؤقتة لتخزين بطاقات الاستذكار
+user_flashcards = {}
 
-# إزالة أي جلسة أو Webhook قديم
-try:
-    bot.remove_webhook()
-except Exception as e:
-    print(f"إشعارات Webhook: {e}")
+# قاموس طبي مدمج للمصطلحات (يمكنك إضافة أو تعديل ما تحتاجه هنا)
+medical_dictionary = {
+    "obesity": {
+        "en": "Excess body fat accumulation affecting health",
+        "ar": "السمنة / تراكم الدهون المفرط",
+    },
+    "diabetes": {
+        "en": "A metabolic disease causing high blood sugar",
+        "ar": "مرض السكري",
+    },
+    "hypertension": {
+        "en": "Condition in which blood pressure is persistently elevated",
+        "ar": "ارتفاع ضغط الدم",
+    },
+    "arthritis": {
+        "en": "Inflammation of one or more joints causing pain and stiffness",
+        "ar": "التهاب المفاصل",
+    },
+    "metabolism": {
+        "en": (
+            "The chemical processes that occur within a living organism to"
+            " maintain life"
+        ),
+        "ar": "عملية الأيض / التمثيل الغذائي",
+    },
+    "dieting": {
+        "en": "Restricting food intake to lose weight or for medical reasons",
+        "ar": "اتباع نظام غذائي / حمية",
+    },
+    "treatment": {
+        "en": "Medical care given to a patient for an illness or injury",
+        "ar": "العلاج الطبي",
+    },
+    "patient": {
+        "en": "A person receiving medical treatment",
+        "ar": "مريض",
+    },
+    "inflammation": {
+        "en": (
+            "A localized physical condition in which part of the body becomes"
+            " reddened, swollen, hot, and often painful"
+        ),
+        "ar": "التهاب",
+    },
+    "symptoms": {
+        "en": (
+            "A physical or mental feature which is regarded as indicating a"
+            " condition of disease"
+        ),
+        "ar": "أعراض المرض",
+    },
+}
 
-previous_vol_usd = None
-previous_price = None
 
-def get_btc_volume_and_analysis():
-    global previous_vol_usd, previous_price
-    try:
-        url = "https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT"
-        response = requests.get(url, timeout=10)
-        res_data = response.json()
-        
-        if res_data.get("code") == "0" and len(res_data["data"]) > 0:
-            ticker = res_data["data"][0]
-            
-            current_price = float(ticker.get("last", 0))
-            high_24h = float(ticker.get("high24h", 0))
-            low_24h = float(ticker.get("low24h", 0))
-            vol_24h_usd = float(ticker.get("volCcy24h", 0))
-            vol_24h_btc = float(ticker.get("vol24h", 0))
-            
-            # 1. تحديد حالة السوق اللحظية
-            price_range = high_24h - low_24h
-            if price_range > 0:
-                price_position = (current_price - low_24h) / price_range
-                if price_position > 0.7:
-                    market_status = "🟢 صاعد قوياً (Bullish)"
-                elif price_position < 0.3:
-                    market_status = "🔴 هابط قوياً (Bearish)"
-                else:
-                    market_status = "🟡 متذبذب / جانبي (Neutral)"
-            else:
-                market_status = "🟡 غير محدد"
+# 1. أمر البدء (Start)
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+  user_id = update.effective_user.id
+  # حماية البوت ليعمل معك خصيصاً بناءً على الآي دي الخاص بك
+  if user_id != OWNER_ID:
+    await update.message.reply_text("عذراً، هذا البوت مخصص للاستخدام الخاص.")
+    return
 
-            # 2. حساب الفوليوم الصافي وتحويله لـ BTC
-            diff_text = ""
-            prediction_text = ""
-            
-            price_move_01 = current_price * 0.001  # حركة 0.1%
-            
-            if previous_vol_usd is not None and previous_price is not None:
-                net_usd_10m = vol_24h_usd - previous_vol_usd
-                net_btc_10m = net_usd_10m / current_price if current_price > 0 else 0
-                price_change_10m = current_price - previous_price
-                
-                if net_usd_10m >= 0:
-                    diff_text = f"📈 **صافي الفوليوم (آخر 10 دقائق):**\n🟢 **شرائي:** +${net_usd_10m:,.2f} (يعادل **+{net_btc_10m:,.2f} BTC**)\n"
-                else:
-                    diff_text = f"📉 **صافي الفوليوم (آخر 10 دقائق):**\n🔴 **بيعي:** -${abs(net_usd_10m):,.2f} (يعادل **-{abs(net_btc_10m):,.2f} BTC**)\n"
+  await update.message.reply_text(
+      "أهلاً بك يا دكتور! 🩺✨\n\n"
+      "قم بإرسال أو لصق أي نص أو شيت طبي هنا، وسأقوم فوراً بتحويله إلى أزرار"
+      " تفاعلية:\n"
+      "1️⃣ انقر على أي كلمة لعرض معناها الإنجليزي وترجمتها العربية.\n"
+      "2️⃣ أضفها إلى قائمة الاستذكار الخاصة بك.\n"
+      "3️⃣ تصفح قائمة استذكارك في أي وقت للمراجعة!"
+  )
 
-                # حساب التوقع بحجم الـ BTC والدولار
-                if abs(price_change_10m) > 0 and abs(net_usd_10m) > 0:
-                    vol_per_dollar_move = abs(net_usd_10m) / abs(price_change_10m)
-                    needed_vol_for_01_usd = vol_per_dollar_move * price_move_01
-                    needed_vol_for_01_btc = needed_vol_for_01_usd / current_price
-                    
-                    if net_usd_10m > 0:
-                        prediction_text = (
-                            f"🎯 **احتمالية الحركة (0.1% = ${price_move_01:,.2f}):**\n"
-                            f"دخول فوليوم شرائي بقيمة **${needed_vol_for_01_usd:,.0f}** (حوالي **{needed_vol_for_01_btc:,.2f} BTC**) "
-                            f"يتوقع أن يرفع السعر إلى **${current_price + price_move_01:,.2f}**\n"
-                        )
-                    else:
-                        prediction_text = (
-                            f"🎯 **احتمالية الحركة (0.1% = ${price_move_01:,.2f}):**\n"
-                            f"خروج فوليوم بيعي بقيمة **${needed_vol_for_01_usd:,.0f}** (حوالي **{needed_vol_for_01_btc:,.2f} BTC**) "
-                            f"يتوقع أن يخفض السعر إلى **${current_price - price_move_01:,.2f}**\n"
-                        )
-                else:
-                    approx_needed_vol_usd = vol_24h_usd * 0.0005
-                    approx_needed_vol_btc = approx_needed_vol_usd / current_price
-                    prediction_text = f"🎯 **توقع الحركة (0.1% = ${price_move_01:,.2f}):**\nيحتاج السعر لضخ/سحب فوليوم يقارب **${approx_needed_vol_usd:,.0f}** (**{approx_needed_vol_btc:,.2f} BTC**) للتحرك بنسبة 0.1%\n"
 
-            previous_vol_usd = vol_24h_usd
-            previous_price = current_price
+# 2. استقبال الشيت أو النص وعرضه كأزرار تفاعلية
+async def handle_sheet(update: Update, context: ContextTypes.DEFAULT_TYPE):
+  user_id = update.effective_user.id
+  if user_id != OWNER_ID:
+    return
 
-            text = (
-                f"⚡ **تقرير BTC/USDT الحصري (كل 10 دقائق)**\n\n"
-                f"📊 **حالة السوق:** {market_status}\n"
-                f"💰 **السعر الحالي:** ${current_price:,.2f}\n\n"
-                f"{diff_text}\n"
-                f"{prediction_text}\n"
-                f"📈 **إجمالي الفوليوم (24 ساعة):** ${vol_24h_usd:,.0f}\n"
-                f"🪙 **إجمالي البيتكوين (24 ساعة):** {vol_24h_btc:,.2f} BTC"
-            )
-            return text
-        return "خطأ في استجابة API الخاصة بـ OKX."
-    except Exception as e:
-        return f"حدث خطأ أثناء جلب البيانات: {str(e)}"
-
-def auto_send_btc_analysis():
-    while True:
-        try:
-            msg = get_btc_volume_and_analysis()
-            bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
-        except Exception as e:
-            print(f"خطأ في الإرسال التلقائي: {e}")
-        time.sleep(600)
-
-threading.Thread(target=auto_send_btc_analysis, daemon=True).start()
-
-@bot.message_handler(commands=['start'])
-def start_command(message):
-    bot.reply_to(message, "أهلاً بك! البوت يعمل بنجاح ويرسل التقرير باللغة العربية مع حساب قيمة البيتكوين مباشرة.")
-
-@bot.message_handler(commands=['volume'])
-def fetch_btc_volume(message):
-    msg = get_btc_volume_and_analysis()
-    bot.reply_to(message, msg, parse_mode="Markdown")
-
-if __name__ == "__main__":
-    print("جاري تشغيل البوت المحدث...")
-    bot.infinity_polling(skip_pending=True)
+  text = update.message.text
+  words = text.
