@@ -16,7 +16,7 @@ logging.basicConfig(
 )
 
 # إعدادات البوت والمالك
-TOKEN = "8829854527:AAF5SrjntKMn3Lwe1VnjKJYzUpVgmUe6-hQ"
+TOKEN = "8750644059:AAEA-loCMcUkGH_EU-Zd334E7NikGI0KOfs"
 OWNER_ID = 8201127054
 
 # قاعدة بيانات مؤقتة لتخزين بطاقات الاستذكار
